@@ -111,7 +111,7 @@ start(I) ->
     
     if 
         I == I0 -> 
-            Pid = spawn(distributor_one_solution, onReceive, 
+            Pid = spawn(distributor, onReceive, 
                        [I, true, false, false, 0, 0, [S0], []]),
             register(procName(I), Pid),
             
@@ -119,7 +119,7 @@ start(I) ->
             ?CONTROLLER ! {register, Pid},
             Pid;
         true -> 
-            Pid = spawn(distributor_one_solution, onReceive, 
+            Pid = spawn(distributor, onReceive, 
                        [I, false, false, false, 0, 0, [], []]), 
             register(procName(I), Pid),
             
@@ -132,7 +132,7 @@ startAll() -> startAl(?M).
 startAl(0) -> true;
 startAl(M) -> start(M-1), startAl(M-1).
 
-gen(I) -> spawn(distributor_one_solution, generate, [I]).
+gen(I) -> spawn(distributor, generate, [I]).
 
 generateAll() -> generateAl(?M).
 generateAl(0) -> true;
@@ -493,3 +493,4 @@ display_chess_board(Positions) ->
     io:format("  " ++ lists:concat(lists:duplicate(N*2 + 1, "-")) ++ "~n"),
     io:format("    " ++ string:join([integer_to_list(X) || X <- lists:seq(1, N)], " ") ++ "~n"),
     io:format("~n" ++ lists:duplicate(50, "=") ++ "~n~n").
+
