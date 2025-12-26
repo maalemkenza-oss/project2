@@ -146,26 +146,27 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound) ->
                     Snd = library:second(Conf,Refvec),
                     TotalPositions = length(Refvec),
                     
-                    if 
-                        countSetBits(Fst) == ?N ->  % N dames placées
-                            io:format("*** SOLUTION COMPLETE TROUVEE sur worker ~w! ***~n", [I]),
-                            io:format("Configuration: ~w~n", [Conf]),
-                            
-                            % Afficher la solution sur l'échiquier
-                            {TreatedPos, CliquePos} = displayOfConf(Conf,Refvec),
-                            ChessPositions = library:displayOnChess(Conf,Refvec),
-                            io:format("Positions des dames: ~w~n", [ChessPositions]),
-                            
-                            % Marquer la solution comme trouvée
-                            ?SOLUTION_FOUND ! {set, true},
-                            
-                            % Arrêter ce worker
-                            ok;
-                        true ->
-                            % Configuration terminale mais pas complète
-                            Nbr=Nbrecdi+1,
-                            onReceive(I,Initiator,Terminit,Terminatedi,Nbr,Nbsenti,S,[Conf|T],SolutionFound)
-                    end;
+                   case countSetBits(Fst) of
+    ?N ->  % N dames placées
+        io:format("*** SOLUTION COMPLETE TROUVEE sur worker ~w! ***~n", [I]),
+        io:format("Configuration: ~w~n", [Conf]),
+
+        % Afficher la solution sur l'échiquier
+        {_TreatedPos, _CliquePos} = displayOfConf(Conf,Refvec),
+        ChessPositions = library:displayOnChess(Conf,Refvec),
+        io:format("Positions des dames: ~w~n", [ChessPositions]),
+
+        % Marquer la solution comme trouvée
+        ?SOLUTION_FOUND ! {set, true},
+
+        % Arrêter ce worker
+        ok;
+    _ ->
+        % Configuration terminale mais pas complète
+        Nbr = Nbrecdi + 1,
+        onReceive(I,Initiator,Terminit,Terminatedi,Nbr,Nbsenti,S,[Conf|T],SolutionFound)
+end;
+
                 false ->
                     % Configuration non-terminale
                     Nbr=Nbrecdi+1,
@@ -323,6 +324,7 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound) ->
             io:format("Worker ~w arrete normalement~n", [I]),
             ok           
     end.
+
 
 
                      
