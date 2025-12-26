@@ -6,7 +6,7 @@
 -import(testhash,[h/3,allConfiguration/3,maph/3,numOfConfByMachines/3]).
 
 -define(N,8).
--define(M,10).
+-define(M,4).
 -define(SOLUTION_FOUND, solution_found_flag).
 
 workstation()-> [w0,w1,w2,w3,w4,w5,w6,w7,w8,w9].
@@ -179,3 +179,4 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SF) ->
 
         % (Ajoutez ici les autres messages snd/term si nécessaire)
     end.
+
