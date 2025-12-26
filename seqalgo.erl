@@ -1,5 +1,5 @@
 -module(seqalgo).
--export([generate/3]).
+-export([generate/2]).
 -import(lists,[map/2,sum/1,reverse/1,filter/2,append/2]).
 -import(sets,[from_list/1,to_list/1,subtract/2,add_element/2]).
 -import(codinglist,[coding_list/1]).
@@ -34,4 +34,5 @@ generate(Refvec, S) ->
         []-> 
             none  % Pas de solution dans cette branche
     end.
+
 
