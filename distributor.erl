@@ -43,16 +43,25 @@ start(I)->
     end.
 
 % Processus pour maintenir le flag de solution
+% Le flag gère maintenant l'affichage UNIQUE
 solution_flag(Found) ->
     receive
-        {set, true} -> 
-            % Diffuser l'arrêt à tous les workers
-            broadcast_stop(),
-            solution_flag(true);
+        {set, true, I, Conf, Refvec} -> 
+            if 
+                Found == false ->
+                    % C'est la première solution reçue !
+                    io:format("~n*** SOLUTION UNIQUE TROUVEE (Worker ~w) ***~n", [I]),
+                    ChessPositions = library:displayOnChess(Conf, Refvec),
+                    io:format("Positions: ~w~n", [ChessPositions]),
+                    broadcast_stop(),
+                    solution_flag(true);
+                true -> 
+                    % Une solution a déjà été affichée, on ignore les autres
+                    solution_flag(true)
+            end;
         {get, From} -> 
             From ! {solution_flag, Found},
-            solution_flag(Found);
-        _ -> solution_flag(Found)
+            solution_flag(Found)
     end.
 
 % Fonction pour diffuser l'arrêt
@@ -308,6 +317,7 @@ end
 
 
                      
+
 
 
 
