@@ -18,7 +18,7 @@ generate(Refvec, S) ->
                     case generate(Refvec, [Rs1|Tl]) of
                         none -> 
                             % Si Rs1 ne donne pas de solution, essayer Rs2
-                            generate_one_helper(Refvec, [Rs2|Tl]);
+                            generate(Refvec, [Rs2|Tl]);
                         Solution -> 
                             Solution  % Solution trouvée, la retourner
                     end;
@@ -29,8 +29,9 @@ generate(Refvec, S) ->
                     
                 not(B2) -> 
                     % Configuration non valide, continuer
-                    generate_one_helper(Refvec, Tl)
+                    generate(Refvec, Tl)
             end;
         []-> 
             none  % Pas de solution dans cette branche
     end.
+
