@@ -242,14 +242,15 @@ end;
                                 (not(B)) -> 
                                     % Configuration terminale - vérifier si solution complète
                                     Fst = library:first(Conf,Refvec),
-                                    if 
-                                        countSetBits(Fst) == ?N ->  % Solution complète!
-                                            io:format("*** SOLUTION dans traitement terminal! ~w ***~n", [I]),
-                                            ?SOLUTION_FOUND ! {set, true},
-                                            ok;
-                                        true ->
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,Tl,[Conf|T],SolutionFound)
-                                    end
+                                   case countSetBits(Fst) of
+    ?N ->  % Solution complète!
+        io:format("*** SOLUTION dans traitement terminal! ~w ***~n", [I]),
+        ?SOLUTION_FOUND ! {set, true},
+        ok;
+    _ ->
+        onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,Tl,[Conf|T],SolutionFound)
+end
+
                             end
                     end;
                 true ->
@@ -328,3 +329,4 @@ end;
 
 
                      
+
