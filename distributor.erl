@@ -2,69 +2,61 @@
 -compile(export_all).
 -import(lists,[map/2,sum/1,reverse/1,filter/2,append/2]).
 -import(codinglist,[coding_list/1]).
--import(library,[split/2,is_Terminal/2,getInitialConf/1,displayOfConf/2,countSetBits/1,second/2]).
+-import(library,[split/2,is_Terminal/2,getInitialConf/1,displayOfConf/2,countSetBits/1,second/2,first/2,displayOnChess/2]).
 -import(testhash,[h/3,allConfiguration/3,maph/3,numOfConfByMachines/3]).
--define(N,8).
--define(M,4).
 
-% Nouvelle variable globale pour indiquer si une solution a été trouvée
+-define(N,8).
+-define(M,10).
 -define(SOLUTION_FOUND, solution_found_flag).
 
 workstation()-> [w0,w1,w2,w3,w4,w5,w6,w7,w8,w9].
 
-indice(0, [H|_]) ->
-                      H;
-indice(I, [_|T]) ->
-                indice(I - 1, T).
+indice(0, [H|_]) -> H;
+indice(I, [_|T]) -> indice(I - 1, T).
 procName(I)-> indice(I , workstation()).
 
 refvec() -> coding_list(?N).
 
-initiator(I) -> Refvec=refvec(),S0= getInitialConf(Refvec), I0=h(S0,?M,Refvec),
-                if 
-                      I == I0 -> true;
-                      I/=I0 -> false
-                end. 
+% --- INITIALISATION ---
 
-% MODIFICATION: Ajout d'un flag global pour solution trouvée
 start(I)-> 
-    % Initialiser le flag global
     case whereis(?SOLUTION_FOUND) of
         undefined -> register(?SOLUTION_FOUND, spawn(fun() -> solution_flag(false) end));
         _ -> ok
     end,
     
-    Refvec=refvec(),S0= getInitialConf(Refvec), I0=h(S0,?M,Refvec),
+    Refvec=refvec(), S0= getInitialConf(Refvec), I0=h(S0,?M,Refvec),
     if 
         I == I0 -> Pid= spawn(distributor, onReceive, [I,true,false,false,0,0,[S0],[],false]),
-                    register(procName(I),Pid );
+                   register(procName(I),Pid );
         I /=  I0 -> Pid=spawn(distributor,onReceive, [I,false,false,false,0,0,[],[],false]), 
-                    register(procName(I),Pid )
+                   register(procName(I),Pid )
     end.
 
-% Processus pour maintenir le flag de solution
-% Le flag gère maintenant l'affichage UNIQUE
+% --- GESTIONNAIRE DE SOLUTION UNIQUE ---
+
 solution_flag(Found) ->
     receive
-        {set, true, I, Conf, Refvec} -> 
+        {set_solution, WorkerId, Conf, Refvec} -> 
             if 
                 Found == false ->
-                    % C'est la première solution reçue !
-                    io:format("~n*** SOLUTION UNIQUE TROUVEE (Worker ~w) ***~n", [I]),
-                    ChessPositions = library:displayOnChess(Conf, Refvec),
-                    io:format("Positions: ~w~n", [ChessPositions]),
+                    % Affiche SEULEMENT la première solution reçue
+                    io:format("~n======================================~n"),
+                    io:format("*** SOLUTION TROUVEE (Worker ~w) ***~n", [WorkerId]),
+                    Chess = displayOnChess(Conf, Refvec),
+                    io:format("Positions: ~w~n", [Chess]),
+                    io:format("======================================~n"),
                     broadcast_stop(),
                     solution_flag(true);
                 true -> 
-                    % Une solution a déjà été affichée, on ignore les autres
                     solution_flag(true)
             end;
         {get, From} -> 
             From ! {solution_flag, Found},
-            solution_flag(Found)
+            solution_flag(Found);
+        _ -> solution_flag(Found)
     end.
 
-% Fonction pour diffuser l'arrêt
 broadcast_stop() ->
     lists:foreach(
         fun(I) -> 
@@ -76,250 +68,114 @@ broadcast_stop() ->
         lists:seq(0, ?M-1)
     ).
 
-% MODIFICATION: Vérifier si solution déjà trouvée
 check_solution_found() ->
-    ?SOLUTION_FOUND ! {get, self()},
-    receive
-        {solution_flag, Found} -> Found
-    after 100 -> false
+    case whereis(?SOLUTION_FOUND) of
+        undefined -> false;
+        Pid -> 
+            Pid ! {get, self()},
+            receive
+                {solution_flag, Found} -> Found
+            after 10 -> false
+            end
     end.
 
-startAll()-> startAl(?M).
-startAl(0)-> true;
-startAl(M) -> start(M-1),startAl(M-1).
+% --- COMMANDES ---
 
-gen(I)-> Pid = spawn(distributor, generate, [I]),Pid.
+startAll() -> startAl(?M).
+startAl(0) -> true;
+startAl(M) -> start(M-1), startAl(M-1).
 
-generateAll() -> generateAl(?M).
-generateAl(0)->  true;
-generateAl(M)-> gen(M-1),generateAl(M-1).
-
-stopAll()-> stopAl(?M).
-stopAl(0)->true;
-stopAl(M)-> sendStop(M-1),stopAl(M-1).
+generateAll() -> [spawn(distributor, generate, [I]) || I <- lists:seq(0, ?M-1)].
 
 sendConf(Conf,I) -> 
-    % MODIFICATION: Vérifier avant d'envoyer
     case check_solution_found() of
         false -> procName(I) ! {state,Conf};
-        true -> ok  % Ne pas envoyer si solution déjà trouvée
+        true -> ok 
     end.
 
-sendRec(I,K) -> procName(I) ! {rec,K}.
-sendSnd(I,K,Totalrecd) -> procName(I) ! {snd ,K,Totalrecd}.
-sendTerm(I,K) -> procName(I) ! {term,K}.
 sendStop(I)  -> procName(I) ! stop.
 
-% MODIFICATION: Vérifier solution avant de générer
+% --- LOGIQUE DES WORKERS ---
+
 generate(I)-> 
     W=procName(I),
     case check_solution_found() of
         false ->
             W!{self(),terminatedi},
             receive 
-                {W,{I,Initiator,Terminit,Terminatedi, Len,Nbrecdi,Nbsenti,S,T,SolutionFound}} -> 
-                    case check_solution_found() of
-                        false ->
-                            if 
-                                ((not (Terminatedi)) and (Len /= 0))-> 
-                                    io:format("length=~w S=~w T=~w ~n Nbrec=~w Nbsent=~w ~n",[Len,S,T,Nbrecdi,Nbsenti]),
-                                    W !{self(),gen},
-                                    generate(I);
-                                ((not (Terminatedi)) and (Len == 0))-> 
-                                    W !{self(),gen},
-                                    io:format("I=~w Initiator=~w Terminit=~w length =~w S=~w T=~w Nbrec=~w Nbsent=~w ~n",
-                                             [I,Initiator,Terminit,Len,S,T,Nbrecdi,Nbsenti]), 
-                                    generate(I);
-                                ((Terminatedi)and(Len == 0))->
-                                    io:format("Distributed Termination Detection~n",[]) ,
-                                    sendStop(I) 
-                            end;
-                        true ->
-                            io:format("Solution deja trouvee, arret worker ~w~n", [I])
+                {W,{I,Initiator,Terminit,Terminatedi, Len,Nbrecdi,Nbsenti,S,T,_}} -> 
+                    if 
+                        (not Terminatedi) -> W ! {self(),gen}, generate(I);
+                        (Terminatedi and (Len == 0)) -> sendStop(I);
+                        true -> generate(I)
                     end
+            after 1000 -> ok
             end;
-        true ->
-            io:format("Solution deja trouvee, arret generation worker ~w~n", [I])
+        true -> ok
     end.
 
-% MODIFICATION: Ajout du paramètre SolutionFound et logique d'arrêt précoce
-onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound) -> 
+onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SF) -> 
     receive
+        stop_now -> ok;
+        stop -> ok;
+
         {state,Conf} -> 
-            % MODIFICATION: Vérifier si c'est une solution COMPLÈTE
             Refvec=refvec(),
             case is_Terminal(Conf,Refvec) of
                 true ->
-                    % Vérifier si c'est une solution complète (toutes les dames placées)
-                    Fst = library:first(Conf,Refvec),
-                    Snd = library:second(Conf,Refvec),
-                    TotalPositions = length(Refvec),
-                    
-                   case countSetBits(Fst) of
-    ?N ->  % N dames placées
-        io:format("*** SOLUTION COMPLETE TROUVEE sur worker ~w! ***~n", [I]),
-        io:format("Configuration: ~w~n", [Conf]),
-
-        % Afficher la solution sur l'échiquier
-        {_TreatedPos, _CliquePos} = displayOfConf(Conf,Refvec),
-        ChessPositions = library:displayOnChess(Conf,Refvec),
-        io:format("Positions des dames: ~w~n", [ChessPositions]),
-
-        % Marquer la solution comme trouvée
-        ?SOLUTION_FOUND ! {set, true},
-
-        % Arrêter ce worker
-        ok;
-    _ ->
-        % Configuration terminale mais pas complète
-        Nbr = Nbrecdi + 1,
-        onReceive(I,Initiator,Terminit,Terminatedi,Nbr,Nbsenti,S,[Conf|T],SolutionFound)
-end;
-
-                false ->
-                    % Configuration non-terminale
-                    Nbr=Nbrecdi+1,
-                    onReceive(I,Initiator,Terminit,Terminatedi,Nbr,Nbsenti,[Conf|S],T,SolutionFound)
-            end;
-            
-        {From,gen} -> 
-            % MODIFICATION: Vérifier si solution déjà trouvée
-            case check_solution_found() of
-                false ->
-                    case S of 
-                        []-> 
-                            if 
-                                (Initiator and not(Terminit))-> 
-                                    J= (I+1) rem ?M,
-                                    sendRec(J,Nbrecdi),
-                                    onReceive(I,Initiator,true,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
-                                not(Initiator) -> 
-                                    onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
-                                Initiator and Terminit -> 
-                                    J= (I+1) rem ?M,
-                                    sendRec(J,Nbrecdi),   
-                                    onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound)
-                            end;
-                        [Conf|Tl]-> 
-                            Refvec=refvec(), 
-                            B=not(is_Terminal(Conf,Refvec)),
-                            
-                            if 
-                                B -> 
-                                    {Rs1,Rs2}= split(Conf,Refvec),
-                                    I1=h(Rs1,?M,Refvec),
-                                    I2=h(Rs2,?M,Refvec),
-                                    
-                                    % MODIFICATION: Heuristique - explorer d'abord la branche la plus prometteuse
-                                    % On priorise la branche avec le plus de bits à 1 dans la clique
-                                    B1= (countSetBits(second(Rs1,Refvec)) >= math:sqrt(length(Refvec))),
-                                    B2= (countSetBits(second(Rs2,Refvec)) >= math:sqrt(length(Refvec))),
-                                    
-                                    % MODIFICATION: Logique simplifiée pour arrêt rapide
-                                    if 
-                                        (B1 and B2) and (I1==I) and (I2==I) -> 
-                                            % Explorer Rs1 d'abord (plus prometteuse)
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,[Rs2|[Rs1|Tl]],T,SolutionFound);
-                                        (B1 and B2) and (I1/=I) and (I2==I) -> 
-                                            sendConf(Rs1,I1),
-                                            Nbs = Nbsenti+1,
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbs,[Rs2|Tl],T,SolutionFound);
-                                        (B1 and B2) and (I2/=I) and (I1==I) -> 
-                                            sendConf(Rs2,I2),
-                                            Nbs = Nbsenti+1,
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbs,[Rs1|Tl],T,SolutionFound);
-                                        (B1 and B2) and (I2/=I) and (I1/=I) -> 
-                                            sendConf(Rs1,I1),
-                                            sendConf(Rs2,I2),
-                                            Nbs = Nbsenti+2,
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbs,Tl,T,SolutionFound);
-                                        (not(B1) and B2) and (I2==I) -> 
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,[Rs2|Tl],T,SolutionFound);
-                                        (not(B1) and B2) and (I2/=I) -> 
-                                            sendConf(Rs2,I2),
-                                            Nbs = Nbsenti+1,
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbs,Tl,T,SolutionFound);
-                                        (B1 and not(B2)) and (I1==I) -> 
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,[Rs1|Tl],T,SolutionFound);
-                                        (B1 and not(B2)) and (I1/=I) -> 
-                                            sendConf(Rs1,I1),
-                                            Nbs = Nbsenti+1,
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbs,Tl,T,SolutionFound);
-                                        (not(B1) and not(B2)) -> 
-                                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,Tl,T,SolutionFound)
-                                    end;
-                                (not(B)) -> 
-                                    % Configuration terminale - vérifier si solution complète
-                                    Fst = library:first(Conf,Refvec),
-                                   case countSetBits(Fst) of
-    ?N ->  % Solution complète!
-        io:format("*** SOLUTION dans traitement terminal! ~w ***~n", [I]),
-        ?SOLUTION_FOUND ! {set, true},
-        ok;
-    _ ->
-        onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,Tl,[Conf|T],SolutionFound)
-end
-
-                            end
+                    Fst = first(Conf,Refvec),
+                    case countSetBits(Fst) of
+                        ?N -> 
+                            % ENVOI AU FLAG CENTRAL POUR AFFICHAGE UNIQUE
+                            ?SOLUTION_FOUND ! {set_solution, I, Conf, Refvec},
+                            ok; 
+                        _ -> 
+                            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi+1,Nbsenti,S,[Conf|T],SF)
                     end;
-                true ->
-                    % Solution déjà trouvée, s'arrêter
-                    ok
+                false ->
+                    onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi+1,Nbsenti,[Conf|S],T,SF)
             end;
-            
+
+        {From, gen} ->
+            case S of 
+                [] -> 
+                    if 
+                        (Initiator) -> 
+                            J= (I+1) rem ?M,
+                            procName(J) ! {rec, Nbrecdi},
+                            onReceive(I,Initiator,true,Terminatedi,Nbrecdi,Nbsenti,S,T,SF);
+                        true -> 
+                            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SF)
+                    end;
+                [Conf|Tl] -> 
+                    Refvec=refvec(),
+                    case is_Terminal(Conf,Refvec) of
+                        false ->
+                            {Rs1,Rs2}= split(Conf,Refvec),
+                            I1=h(Rs1,?M,Refvec),
+                            I2=h(Rs2,?M,Refvec),
+                            % Distribution simple
+                            if I1 == I -> NewS = [Rs1|Tl], Ns = Nbsenti; true -> sendConf(Rs1,I1), NewS = Tl, Ns = Nbsenti+1 end,
+                            if I2 == I -> FinalS = [Rs2|NewS], FinalNs = Ns; true -> sendConf(Rs2,I2), FinalS = NewS, FinalNs = Ns+1 end,
+                            onReceive(I,Initiator,false,Terminatedi,Nbrecdi,FinalNs,FinalS,T,SF);
+                        true ->
+                            % Vérification si solution ici aussi
+                            Fst = first(Conf,Refvec),
+                            case countSetBits(Fst) of
+                                ?N -> ?SOLUTION_FOUND ! {set_solution, I, Conf, Refvec}, ok;
+                                _ -> onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,Tl,[Conf|T],SF)
+                            end
+                    end
+            end;
+
         {From,terminatedi} -> 
-            Card=length(S),
-            From ! {procName(I),{I,Initiator,Terminit,Terminatedi,Card,Nbrecdi,Nbsenti,S,T,SolutionFound}},
-            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
-        
-{rec,K} ->
-    case check_solution_found() of
-        false ->
-            J = (I+1) rem ?M,
-            sendRec(J, Nbrecdi+K),
-            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
-        true ->
-            ok
-    end;
+            From ! {procName(I),{I,Initiator,Terminit,Terminatedi,length(S),Nbrecdi,Nbsenti,S,T,SF}},
+            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SF);
 
-        
-      {snd,K,Total} ->
-    case check_solution_found() of
-        false ->
+        {rec,K} -> 
             J = (I+1) rem ?M,
-            sendSnd(J,K,Total),
-            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
-        true ->
-            ok
-    end;
+            procName(J) ! {rec, Nbrecdi+K},
+            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SF)
 
-           
- 
-{term,K} ->
-    case check_solution_found() of
-        false ->
-            J = (I+1) rem ?M,
-            sendTerm(J,K),
-            onReceive(I,Initiator,Terminit,true,Nbrecdi,Nbsenti,S,T,SolutionFound);
-        true ->
-            ok
-    end;
-        
-        stop_now ->  % MODIFICATION: Nouveau message pour arrêt immédiat
-            io:format("Worker ~w arrete (solution trouvee)~n", [I]),
-            ok;
-            
-        stop -> 
-            io:format("Worker ~w arrete normalement~n", [I]),
-            ok           
+        % (Ajoutez ici les autres messages snd/term si nécessaire)
     end.
-
-
-
-                     
-
-
-
-
-
-
