@@ -4,8 +4,8 @@
 -import(codinglist,[coding_list/1]).
 -import(library,[split/2,is_Terminal/2,getInitialConf/1,displayOfConf/2,countSetBits/1,second/2]).
 -import(testhash,[h/3,allConfiguration/3,maph/3,numOfConfByMachines/3]).
--define(N,4).
--define(M,10).
+-define(N,8).
+-define(M,4).
 
 % Nouvelle variable globale pour indiquer si une solution a été trouvée
 -define(SOLUTION_FOUND, solution_found_flag).
@@ -329,4 +329,5 @@ end
 
 
                      
+
 
