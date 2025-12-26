@@ -263,20 +263,38 @@ end
             From ! {procName(I),{I,Initiator,Terminit,Terminatedi,Card,Nbrecdi,Nbsenti,S,T,SolutionFound}},
             onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
         
-  {rec,_} ->
-    ok;
+{rec,K} ->
+    case check_solution_found() of
+        false ->
+            J = (I+1) rem ?M,
+            sendRec(J, Nbrecdi+K),
+            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
+        true ->
+            ok
+    end;
 
         
-      {snd,_,_} ->
-    ok;
+      {snd,K,Total} ->
+    case check_solution_found() of
+        false ->
+            J = (I+1) rem ?M,
+            sendSnd(J,K,Total),
+            onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T,SolutionFound);
+        true ->
+            ok
+    end;
 
            
-        
-        {term, K} -> 
-            
-            
-    ok;
-
+ 
+{term,K} ->
+    case check_solution_found() of
+        false ->
+            J = (I+1) rem ?M,
+            sendTerm(J,K),
+            onReceive(I,Initiator,Terminit,true,Nbrecdi,Nbsenti,S,T,SolutionFound);
+        true ->
+            ok
+    end;
         
         stop_now ->  % MODIFICATION: Nouveau message pour arrêt immédiat
             io:format("Worker ~w arrete (solution trouvee)~n", [I]),
@@ -290,5 +308,6 @@ end
 
 
                      
+
 
 
