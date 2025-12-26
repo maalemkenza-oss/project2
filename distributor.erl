@@ -4,10 +4,10 @@
 -import(codinglist,[coding_list/1]).
 -import(library,[split/2,is_Terminal/2,getInitialConf/1,displayOfConf/2,countSetBits/1,second/2]).
 -import(testhash,[h/3,allConfiguration/3,maph/3,numOfConfByMachines/3]).
--define(N,4).
+-define(N,8).  % CHANGÉ: 4 → 8
 -define(M,10).
 
-% AJOUT: Variable globale pour indiquer si une solution a été trouvée
+% Variable globale pour indiquer si une solution a été trouvée
 -define(SOLUTION_FOUND_FLAG, solution_found).
 
 workstation()-> [w0,w1,w2,w3,w4,w5,w6,w7,w8,w9].
@@ -26,7 +26,7 @@ initiator(I) -> Refvec=refvec(),S0= getInitialConf(Refvec), I0=h(S0,?M,Refvec),
                       I/=I0 -> false
                 end. 
 
-% AJOUT: Initialiser le flag de solution
+% Initialiser le flag de solution
 start(I)-> 
     % Initialiser le flag global si ce n'est pas déjà fait
     case whereis(?SOLUTION_FOUND_FLAG) of
@@ -57,11 +57,11 @@ start(I)->
         I /=  I0 -> Pid=spawn(distributor,onReceive, [I,false,false,false,0,0,[],[]]), register(procName(I),Pid )
     end.
 
-% AJOUT: Fonction pour diffuser l'arrêt à tous les workers
+% Fonction pour diffuser l'arrêt à tous les workers
 broadcast_stop() ->
     [procName(I) ! stop_solution_found || I <- lists:seq(0, ?M-1)].
 
-% AJOUT: Vérifier si une solution a déjà été trouvée
+% Vérifier si une solution a déjà été trouvée
 is_solution_found() ->
     case whereis(?SOLUTION_FOUND_FLAG) of
         undefined -> false;
@@ -73,7 +73,7 @@ is_solution_found() ->
             end
     end.
 
-% AJOUT: Marquer qu'une solution a été trouvée
+% Marquer qu'une solution a été trouvée
 mark_solution_found() ->
     case whereis(?SOLUTION_FOUND_FLAG) of
         undefined -> ok;
@@ -98,7 +98,7 @@ stopAl(M)-> sendStop(M-1),stopAl(M-1).
 
 
 sendConf(Conf,I) -> 
-    % AJOUT: Ne pas envoyer si solution déjà trouvée
+    % Ne pas envoyer si solution déjà trouvée
     case is_solution_found() of
         false -> procName(I) ! {state,Conf};
         true -> ok
@@ -129,25 +129,25 @@ generate(I)-> W=procName(I),
              W!{self(),terminatedi},
   receive 
         {W,{I,Initiator,Terminit,Terminatedi, Len,Nbrecdi,Nbsenti,S,T}} -> 
-            % AJOUT: Vérifier si solution déjà trouvée
+            % Vérifier si solution déjà trouvée
             case is_solution_found() of
                 false ->
                     if 
                         ((not (Terminatedi)) and (Len /= 0))-> 
-                            io:format("length=~w S=~w T=~w ~n Nbrec=~w Nbsent=~w ~n",[Len,S,T,Nbrecdi,Nbsenti]),
+                            io:format("Worker ~w: length=~w, recus=~w, envoyes=~w~n", 
+                                     [I,Len,Nbrecdi,Nbsenti]),
                             W !{self(),gen},
                             generate(I);
                         ((not (Terminatedi)) and (Len == 0))-> 
                             W !{self(),gen},
-                            io:format("I=~w Initiator=~w Terminit=~w length =~w S=~w T=~w Nbrec=~w Nbsent=~w ~n",
-                                     [I,Initiator,Terminit,Len,S,T,Nbrecdi,Nbsenti]), 
+                            io:format("Worker ~w: pile vide, attente~n", [I]), 
                             generate(I);
                         ((Terminatedi)and(Len == 0))->
-                            io:format("Distributed Termination Detection~n",[]),
+                            io:format("Detection de terminaison distribuee~n",[]),
                             sendStop(I) 
                     end;
                 true ->
-                    io:format("Solution deja trouvee, arret du worker ~w~n", [I]),
+                    io:format("Worker ~w arrete (solution trouvee)~n", [I]),
                     ok
             end
    end.
@@ -155,14 +155,14 @@ generate(I)-> W=procName(I),
 onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T) -> 
     receive
         {state,Conf} -> 
-            % AJOUT: Vérifier d'abord si solution déjà trouvée
+            % Vérifier d'abord si solution déjà trouvée
             case is_solution_found() of
                 false ->
                     Nbr=Nbrecdi+1,
                     Refvec=refvec(),
                     B=not(is_Terminal(Conf,Refvec)),
                     
-                    % AJOUT: Vérifier si c'est une solution complète
+                    % Vérifier si c'est une solution complète
                     if 
                         B ->  
                             onReceive(I,Initiator,Terminit,Terminatedi,Nbr,Nbsenti,[Conf|S],T);
@@ -170,12 +170,14 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T) ->
                             % Configuration terminale - vérifier si c'est une solution complète
                             Fst = library:first(Conf,Refvec),
                             if 
-                                % AJOUT: Si toutes les N dames sont placées
+                                % Si toutes les N dames sont placées (8 pour N=8)
                                 countSetBits(Fst) == ?N -> 
-                                    io:format("*** SOLUTION COMPLETE TROUVEE sur worker ~w! ***~n", [I]),
+                                    io:format("~n*** SOLUTION COMPLETE TROUVEE sur worker ~w! ***~n", [I]),
                                     % Afficher les positions
                                     ChessPositions = library:displayOnChess(Conf,Refvec),
                                     io:format("Positions des dames: ~w~n", [ChessPositions]),
+                                    % Afficher l'échiquier
+                                    display_chess_board(ChessPositions),
                                     % Marquer que solution trouvée
                                     mark_solution_found(),
                                     ok;
@@ -190,7 +192,7 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T) ->
             end;
             
         {From,gen} -> 
-            % AJOUT: Vérifier si solution déjà trouvée
+            % Vérifier si solution déjà trouvée
             case is_solution_found() of
                 false ->
                     case S of 
@@ -216,9 +218,10 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T) ->
                                     {Rs1,Rs2}= split(Conf,Refvec),
                                     I1=h(Rs1,?M,Refvec),
                                     I2=h(Rs2,?M,Refvec),
-                                    io:format("I1=~w, I2=~w",[I1,I2]),
-                                    B1= (countSetBits(second(Rs1,Refvec)) >= math:sqrt(length(Refvec))),
-                                    B2= (countSetBits(second(Rs2,Refvec)) >= math:sqrt(length(Refvec))),
+                                    io:format("Worker ~w: split -> vers workers ~w et ~w~n", [I, I1, I2]),
+                                    % OPTIMISATION POUR N=8: seuil plus élevé
+                                    B1= (countSetBits(second(Rs1,Refvec)) >= 8),  % Au moins 8 candidats
+                                    B2= (countSetBits(second(Rs2,Refvec)) >= 8),
                                     
                                     if 
                                         (B1 and B2) and (I1==I) and (I2==I) -> 
@@ -252,14 +255,15 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T) ->
                                             onReceive(I,Initiator,false,Terminatedi,Nbrecdi,Nbsenti,Tl,T)
                                     end;
                                 (not(B)) -> 
-                                    % AJOUT: Vérifier si solution complète dans le traitement terminal
+                                    % Vérifier si solution complète dans le traitement terminal
                                     Refvec2=refvec(),
                                     Fst = library:first(Conf,Refvec2),
                                     if 
                                         countSetBits(Fst) == ?N -> 
-                                            io:format("*** SOLUTION dans traitement terminal! ~w ***~n", [I]),
+                                            io:format("~n*** SOLUTION dans traitement terminal! Worker ~w ***~n", [I]),
                                             ChessPositions = library:displayOnChess(Conf,Refvec2),
                                             io:format("Positions des dames: ~w~n", [ChessPositions]),
+                                            display_chess_board(ChessPositions),
                                             mark_solution_found(),
                                             ok;
                                         true ->
@@ -325,13 +329,13 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T) ->
                             sendTerm(J,Total),
                             onReceive(I,Initiator,Terminit,true,Nbrecdi,Nbsenti,S,T);
                         Initiator -> 
-                            io:format(" Total Solutions trouvees avant arret: ~w~n",[K]), 
+                            io:format("~nTotal des configurations terminales avant arret: ~w~n",[K]), 
                             onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T)
                     end;
                 true -> ok
             end;
         
-        % AJOUT: Nouveau message pour arrêt immédiat quand solution trouvée
+        % Nouveau message pour arrêt immédiat quand solution trouvée
         stop_solution_found ->
             io:format("Worker ~w arrete (solution trouvee)~n", [I]),
             ok;
@@ -341,7 +345,7 @@ onReceive(I,Initiator,Terminit,Terminatedi,Nbrecdi,Nbsenti,S,T) ->
             ok           
     end.
 
-% AJOUT: Processus auxiliaire pour le flag de solution
+% Processus auxiliaire pour le flag de solution
 solution_flag(Found) ->
     receive
         {set_found} -> 
@@ -351,3 +355,26 @@ solution_flag(Found) ->
             From ! {flag_status, Found},
             solution_flag(Found)
     end.
+
+% Fonction pour afficher l'échiquier
+display_chess_board(Positions) ->
+    io:format("~nRepresentation de l'echiquier 8x8:~n"),
+    io:format("  " ++ lists:concat(lists:duplicate(17, "-")) ++ "~n"),
+    lists:foreach(
+        fun(Row) ->
+            io:format("~w |", [Row]),
+            lists:foreach(
+                fun(Col) ->
+                    case lists:member({Row, Col}, Positions) of
+                        true -> io:format(" Q ");
+                        false -> io:format(" . ")
+                    end
+                end,
+                lists:seq(1, 8)
+            ),
+            io:format("|~n")
+        end,
+        lists:seq(1, 8)
+    ),
+    io:format("  " ++ lists:concat(lists:duplicate(17, "-")) ++ "~n"),
+    io:format("    1 2 3 4 5 6 7 8~n~n").
